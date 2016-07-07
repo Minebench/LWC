@@ -122,6 +122,12 @@ public class LWCPlayerListener implements Listener {
             return false;
         }
 
+        if (lwc.useFastHopperProtection()) {
+            if (holder instanceof Hopper && hopperHolder instanceof Hopper) {
+                return false;
+            }
+        }
+
         try {
             if (holder instanceof BlockState) {
                 location = ((BlockState) holder).getLocation();

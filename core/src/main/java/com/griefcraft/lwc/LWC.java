@@ -2043,4 +2043,11 @@ public class LWC {
         return !configuration.getBoolean("core.disableHistory", false);
     }
 
+    /**
+     * @return true if we should use the fast-hopper lite protection
+     */
+    public boolean useFastHopperProtection() {
+        return configuration.getBoolean("core.fastHopperProtection", false);
+    }
+
 }
