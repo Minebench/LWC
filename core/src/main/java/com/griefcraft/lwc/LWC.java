@@ -204,11 +204,13 @@ public class LWC {
      * Protection configuration cache
      */
     private final Map<String, String> protectionConfigurationCache = new HashMap<String, String>();
+    private boolean fastHoppers;
 
     public LWC(LWCPlugin plugin) {
         this.plugin = plugin;
         LWC.instance = this;
         configuration = Configuration.load("core.yml");
+        fastHoppers = configuration.getBoolean("core.fastHopperProtection", false);
         protectionCache = new ProtectionCache(this);
         backupManager = new BackupManager();
         moduleLoader = new ModuleLoader(this);
@@ -2047,7 +2049,7 @@ public class LWC {
      * @return true if we should use the fast-hopper lite protection
      */
     public boolean useFastHopperProtection() {
-        return configuration.getBoolean("core.fastHopperProtection", false);
+        return fastHoppers;
     }
 
 }
