@@ -210,7 +210,7 @@ public class LWC {
         this.plugin = plugin;
         LWC.instance = this;
         configuration = Configuration.load("core.yml");
-        fastHoppers = configuration.getBoolean("core.fastHopperProtection", false);
+        fastHoppers = configuration.getBoolean("optional.fastHopperProtection", false);
         protectionCache = new ProtectionCache(this);
         backupManager = new BackupManager();
         moduleLoader = new ModuleLoader(this);
