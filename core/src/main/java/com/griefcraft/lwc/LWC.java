@@ -1898,6 +1898,7 @@ public class LWC {
         plugin.loadLocales();
         protectionConfigurationCache.clear();
         Configuration.reload();
+        fastHoppers = configuration.getBoolean("optional.fastHopperProtection", false);
         moduleLoader.dispatchEvent(new LWCReloadEvent());
     }
 
