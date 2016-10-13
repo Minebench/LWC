@@ -84,6 +84,10 @@ public class LWCPlayerListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onMoveItem(InventoryMoveItemEvent event) {
+        if (plugin.getLWC().useFastHopperProtection() && event.getSource().getHolder() instanceof Hopper) {
+            return;
+        }
+
         boolean result;
 
         // if the initiator is the same as the source it is a dropper i.e. depositing items
@@ -104,8 +108,6 @@ public class LWCPlayerListener implements Listener {
      * @param inventory
      */
     private boolean handleMoveItemEvent(Inventory initiator, Inventory inventory) {
-        LWC lwc = LWC.getInstance();
-
         if (inventory == null) {
             return false;
         }
@@ -137,6 +139,8 @@ public class LWCPlayerListener implements Listener {
         } catch (Exception e) {
             return false;
         }
+
+        LWC lwc = plugin.getLWC();
 
         // High-intensity zone: increase protection cache if it's full, otherwise
         // the database will be getting rammed
