@@ -31,6 +31,7 @@ package com.griefcraft.listeners;
 import com.griefcraft.cache.ProtectionCache;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.lwc.LWCPlugin;
+import com.griefcraft.model.Flag;
 import com.griefcraft.model.Protection;
 import com.griefcraft.scripting.event.LWCProtectionDestroyEvent;
 import com.griefcraft.scripting.event.LWCProtectionRegisterEvent;
@@ -351,6 +352,19 @@ public class LWCBlockListener implements Listener {
                         event.setCancelled(true);
                         return;
                     }
+                }
+            }
+        }
+
+        if (lwc.useAlternativeHopperProtection() && block.getType() == Material.HOPPER) {
+            // we use the alternative hopper protection, check if the block is placed below a hopper!
+            Protection protection = lwc.findProtection(block.getLocation().add(0, 1, 0));
+            if (protection != null) { // found protection above hopper
+                boolean denyHoppers = Boolean.parseBoolean(lwc.resolveProtectionConfiguration(Material.getMaterial(protection.getBlockId()), "denyHoppers"));
+                if (!lwc.canAccessProtection(player, protection) && !lwc.canAdminProtection(player, protection) && denyHoppers != protection.hasFlag(Flag.Type.HOPPER)) {
+                    // player can't access the protection and hoppers aren't enabled for it
+                    event.setCancelled(true);
+                    return;
                 }
             }
         }

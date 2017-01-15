@@ -77,6 +77,10 @@ optional:
     # protected hopper, but doesn't apply to a hopper pulling from a protected chest
     fastHopperProtection: false
 
+    # Disable protection checks for any item moves except for hopper minecarts. Protection against
+    # hoppers is done by checking the owner of the container above the hopper on place
+    alternativeHopperProtection: false
+
 # Database information for LWC
 database:
 
