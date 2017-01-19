@@ -220,6 +220,7 @@ public class LWC {
         LWC.instance = this;
         configuration = Configuration.load("core.yml");
         fastHoppers = configuration.getBoolean("optional.fastHopperProtection", false);
+        alternativeHoppers = configuration.getBoolean("optional.alternativeHopperProtection", false);
         protectionCache = new ProtectionCache(this);
         backupManager = new BackupManager();
         moduleLoader = new ModuleLoader(this);
