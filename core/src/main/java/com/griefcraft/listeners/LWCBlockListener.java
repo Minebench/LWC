@@ -361,9 +361,10 @@ public class LWCBlockListener implements Listener {
             Protection protection = lwc.findProtection(block.getLocation().add(0, 1, 0));
             if (protection != null) { // found protection above hopper
                 boolean denyHoppers = Boolean.parseBoolean(lwc.resolveProtectionConfiguration(Material.getMaterial(protection.getBlockId()), "denyHoppers"));
-                if (!lwc.canAccessProtection(player, protection) && !lwc.canAdminProtection(player, protection) && denyHoppers != protection.hasFlag(Flag.Type.HOPPER)) {
+                if (!lwc.canAccessProtection(player, protection) || (denyHoppers != protection.hasFlag(Flag.Type.HOPPER) && !lwc.canAdminProtection(player, protection))) {
                     // player can't access the protection and hoppers aren't enabled for it
                     event.setCancelled(true);
+                    lwc.enforceAccess(player, protection, protection.getBlock(), false);
                     return;
                 }
             }
