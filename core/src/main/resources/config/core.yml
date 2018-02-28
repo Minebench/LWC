@@ -78,7 +78,8 @@ optional:
     fastHopperProtection: false
 
     # Disable protection checks for any item moves except for hopper minecarts. Protection against
-    # hoppers is done by checking the owner of the container above the hopper on place
+    # hoppers is now done by checking for protections of the containers that the hopper is pointing
+    # into and that are above the hopper that the player placing the block doesn't have access to.
     alternativeHopperProtection: false
 
 # Database information for LWC

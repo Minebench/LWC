@@ -85,7 +85,8 @@ public class LWCPlayerListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onMoveItem(InventoryMoveItemEvent event) {
-        if (plugin.getLWC().useAlternativeHopperProtection() && !(event.getDestination().getHolder() instanceof HopperMinecart))
+        if (plugin.getLWC().useAlternativeHopperProtection()
+                && !(event.getSource().getHolder() instanceof HopperMinecart || event.getDestination().getHolder() instanceof HopperMinecart))
             return;
 
         if (plugin.getLWC().useFastHopperProtection() && event.getSource().getHolder() instanceof Hopper)

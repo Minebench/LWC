@@ -55,6 +55,8 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.world.StructureGrowEvent;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.material.Hopper;
 import org.bukkit.material.MaterialData;
 import org.bukkit.material.PistonBaseMaterial;
 
@@ -358,17 +360,36 @@ public class LWCBlockListener implements Listener {
 
         if (lwc.useAlternativeHopperProtection() && block.getType() == Material.HOPPER) {
             // we use the alternative hopper protection, check if the block is placed below a hopper!
-            Protection protection = lwc.findProtection(block.getLocation().add(0, 1, 0));
-            if (protection != null) { // found protection above hopper
-                boolean denyHoppers = Boolean.parseBoolean(lwc.resolveProtectionConfiguration(Material.getMaterial(protection.getBlockId()), "denyHoppers"));
+            Block above = block.getRelative(BlockFace.UP);
+            if (!checkHopperProtection(player, above)) {
+                event.setCancelled(true);
+                return;
+            }
+            
+            // also check if the hopper is pointing into a protection
+            Hopper hopperData = (Hopper) block.getState().getData();
+            Block target = block.getRelative(hopperData.getFacing());
+            if (!checkHopperProtection(player, target)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
+    
+    private boolean checkHopperProtection(Player player, Block block) {
+        if (block.getState() instanceof InventoryHolder) { // only care if block has an inventory
+            LWC lwc = plugin.getLWC();
+            Protection protection = lwc.findProtection(block);
+            if (protection != null) { // found protection
+                boolean denyHoppers = Boolean.parseBoolean(lwc.resolveProtectionConfiguration(block, "denyHoppers"));
                 if (!lwc.canAccessProtection(player, protection) || (denyHoppers != protection.hasFlag(Flag.Type.HOPPER) && !lwc.canAdminProtection(player, protection))) {
                     // player can't access the protection and hoppers aren't enabled for it
-                    event.setCancelled(true);
-                    lwc.enforceAccess(player, protection, protection.getBlock(), false);
-                    return;
+                    lwc.enforceAccess(player, protection, block, false);
+                    return false;
                 }
             }
         }
+        return true;
     }
 
     @EventHandler(ignoreCancelled = true)
