@@ -30,6 +30,7 @@ package com.griefcraft.lwc;
 
 import com.griefcraft.bukkit.EntityBlock;
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -1022,10 +1023,8 @@ public class LWC {
 
         sender.sendMessage("Loading protections via STREAM mode");
 
-        try (Closer closer = new Closer()) {
-            Statement resultStatement = closer.register(physicalDatabase.getConnection()
-                                                                        .createStatement(ResultSet.TYPE_FORWARD_ONLY,
-                                                                                         ResultSet.CONCUR_READ_ONLY));
+        try (Connection connection = physicalDatabase.getConnection()) {
+            Statement resultStatement = connection.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
 
             if (physicalDatabase.getType() == Database.Type.MySQL) {
                 resultStatement.setFetchSize(Integer.MIN_VALUE);
@@ -1033,9 +1032,9 @@ public class LWC {
 
             String prefix = physicalDatabase.getPrefix();
 
-            ResultSet result = closer.register(resultStatement.executeQuery(
+            ResultSet result = resultStatement.executeQuery(
                     "SELECT id, owner, type, x, y, z, data, blockId, world, password, date, last_accessed FROM " +
-                    prefix + "protections" + where));
+                    prefix + "protections" + where);
             while (result.next()) {
                 Protection protection = physicalDatabase.resolveProtection(result);
                 World world = protection.getBukkitWorld();
@@ -1103,9 +1102,9 @@ public class LWC {
         // the database prefix
         String prefix = getPhysicalDatabase().getPrefix();
 
-        try (Closer closer = new Closer()) {
+        try (Connection connection = getPhysicalDatabase().getConnection()) {
             // create the statement to use
-            Statement statement = closer.register(getPhysicalDatabase().getConnection().createStatement());
+            Statement statement = connection.createStatement();
 
             while (iter.hasNext()) {
                 int protectionId = iter.next();
@@ -2007,9 +2006,10 @@ public class LWC {
             databaseThread.flush();
             databaseThread.stop();
             physicalDatabase = new PhysDB();
-            physicalDatabase.connect();
-            physicalDatabase.load();
-            databaseThread = new DatabaseThread(this);
+            if (physicalDatabase.connect()) {
+                physicalDatabase.load();
+                databaseThread = new DatabaseThread(this);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

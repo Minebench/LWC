@@ -44,6 +44,8 @@ import org.bukkit.entity.Player;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -668,6 +670,18 @@ public class Protection {
         return lastAccessed;
     }
 
+    public boolean wasRemoved() {
+        return removed;
+    }
+
+    public boolean wasModified() {
+        return modified;
+    }
+
+    public boolean isRemoving() {
+        return removing;
+    }
+
     public void setBlockId(int blockId) {
         if (removed) {
             return;
@@ -858,6 +872,27 @@ public class Protection {
     }
 
     /**
+     * Assign values to statement field
+     *
+     * @param statement The statement
+     * @throws SQLException
+     */
+    public void assignValues(PreparedStatement statement) throws SQLException {
+        statement.setInt(1, getId());
+        statement.setInt(2, getType().ordinal());
+        statement.setInt(3, getBlockId());
+        statement.setString(4, getWorld());
+        statement.setString(5, getData().toJSONString());
+        statement.setString(6, getOwner());
+        statement.setString(7, getPassword());
+        statement.setInt(8, getX());
+        statement.setInt(9, getY());
+        statement.setInt(10, getZ());
+        statement.setString(11, getCreation());
+        statement.setLong(12, getLastAccessed());
+    }
+
+    /**
      * Queue the protection to be saved
      */
     public void save() {
@@ -876,17 +911,7 @@ public class Protection {
             return;
         }
 
-        // encode JSON objects
-        encodeRights();
-        encodeFlags();
-
-        // only save the protection if it was modified
-        if (modified && !removing) {
-            LWC.getInstance().getPhysicalDatabase().saveProtection(this);
-        }
-
-        // check the cache for history updates
-        checkAndSaveHistory();
+        LWC.getInstance().getPhysicalDatabase().saveProtection(this);
     }
 
     /**

@@ -30,9 +30,8 @@ package com.griefcraft.util;
 
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.model.Protection;
-import com.griefcraft.sql.Database;
+import com.griefcraft.sql.PhysDB;
 
-import java.util.Iterator;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -134,21 +133,12 @@ public class DatabaseThread implements Runnable {
      */
     private void flushDatabase() {
         if (!updateQueue.isEmpty()) {
-            Database database = lwc.getPhysicalDatabase();
-            database.setAutoCommit(false);
+            PhysDB database = lwc.getPhysicalDatabase();
             database.setUseStatementCache(false);
 
-            // Begin iterating through the queue
-            Iterator<Protection> iter = updateQueue.iterator();
-            while (iter.hasNext()) {
-                Protection protection = iter.next();
-                iter.remove();
-                protection.saveNow();
-            }
+            database.saveProtections(updateQueue);
 
-            // Commit the changes to the database
             database.setUseStatementCache(true);
-            database.setAutoCommit(true);
         }
 
         // update the time we last flushed at

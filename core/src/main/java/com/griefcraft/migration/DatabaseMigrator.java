@@ -32,6 +32,7 @@ import com.griefcraft.model.History;
 import com.griefcraft.model.Protection;
 import com.griefcraft.sql.PhysDB;
 
+import java.sql.Connection;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -46,8 +47,8 @@ public class DatabaseMigrator {
      * @return true if the conversion was most likely successful
      */
     public boolean migrate(PhysDB fromDatabase, PhysDB toDatabase) {
-        try {
-            toDatabase.getConnection().setAutoCommit(false);
+        try (Connection connection = toDatabase.getConnection()) {
+            connection.setAutoCommit(false);
 
             // some prelim data
             int startProtections = toDatabase.getProtectionCount();
@@ -63,7 +64,7 @@ public class DatabaseMigrator {
                     protection.saveNow();
                 }
 
-                toDatabase.getConnection().commit();
+                connection.commit();
                 if (expectedProtections != (protectionCount = fromDatabase.getProtectionCount())) {
                     logger.info("Weird, only " + protectionCount + " protections are in the database? Continuing...");
                 }
@@ -81,8 +82,8 @@ public class DatabaseMigrator {
                 }
             }
 
-            fromDatabase.getConnection().close();
-            toDatabase.getConnection().setAutoCommit(true);
+            fromDatabase.dispose();
+            connection.setAutoCommit(true);
         } catch (Exception e) {
             e.printStackTrace();
             return false;

@@ -77,12 +77,10 @@ public class MySQLPost200 implements MigrationUtility {
         // Load the sqlite database
         PhysDB sqlite = new PhysDB(Type.SQLite);
 
-        try {
-            sqlite.connect();
-            sqlite.load();
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (!sqlite.connect()) {
+            return;
         }
+        sqlite.load();
 
         if (migrator.migrate(sqlite, lwc.getPhysicalDatabase())) {
             logger.info("Successfully converted.");

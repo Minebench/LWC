@@ -40,6 +40,7 @@ import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.scheduler.BukkitScheduler;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -112,7 +113,7 @@ public class AdminCleanup extends JavaModule {
          *
          * @param toRemove
          */
-        public void push(List<Integer> toRemove) throws SQLException {
+        public void push(Connection connection, List<Integer> toRemove) throws SQLException {
             final StringBuilder builder = new StringBuilder();
             final int total = toRemove.size();
             int count = 0;
@@ -124,7 +125,7 @@ public class AdminCleanup extends JavaModule {
             String prefix = lwc.getPhysicalDatabase().getPrefix();
 
             // create the statement to use
-            Statement statement = lwc.getPhysicalDatabase().getConnection().createStatement();
+            Statement statement = connection.createStatement();
 
             while (iter.hasNext()) {
                 int protectionId = iter.next();
@@ -150,30 +151,34 @@ public class AdminCleanup extends JavaModule {
         }
 
         public void run() {
-            List<Integer> toRemove = new LinkedList<Integer>();
+            List<Integer> toRemove = new LinkedList<>();
             int removed = 0;
             int percentChecked = 0;
 
             // the bukkit scheduler
             BukkitScheduler scheduler = Bukkit.getScheduler();
 
-            try {
-                sender.sendMessage(Colors.Red + "Processing cleanup request now in a separate thread");
+            sender.sendMessage(Colors.Red + "Processing cleanup request now in a separate thread");
 
-                // the list of protections work off of. We batch updates to the world
-                // so we can more than 20 results/second.
-                final List<Protection> protections = new ArrayList<Protection>(BATCH_SIZE);
+            // the list of protections work off of. We batch updates to the world
+            // so we can more than 20 results/second.
+            final List<Protection> protections = new ArrayList<>(BATCH_SIZE);
 
-                // amount of protections
-                int totalProtections = lwc.getPhysicalDatabase().getProtectionCount();
+            // amount of protections
+            int totalProtections = lwc.getPhysicalDatabase().getProtectionCount();
 
-                // TODO separate stream logic to somewhere else :)
-                // Create a new database connection, we are just reading
-                PhysDB database = new PhysDB();
-                database.connect();
-                database.load();
+            // TODO separate stream logic to somewhere else :)
+            // Create a new database connection, we are just reading
+            PhysDB database = new PhysDB();
+            database.setReadOnly(true);
+            if (!database.connect()) {
+                return;
+            }
+            database.load();
 
-                Statement resultStatement = database.getConnection().createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+            try (Connection connection = lwc.getPhysicalDatabase().getConnection()) {
+
+                Statement resultStatement = connection.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
 
                 if (lwc.getPhysicalDatabase().getType() == Database.Type.MySQL) {
                     resultStatement.setFetchSize(Integer.MIN_VALUE);
@@ -184,7 +189,7 @@ public class AdminCleanup extends JavaModule {
                 int checked = 0;
 
                 while (result.next()) {
-                    final Protection tprotection = database.resolveProtection(result);
+                    final Protection tprotection = lwc.getPhysicalDatabase().resolveProtection(result);
 
                     if (protections.size() != BATCH_SIZE) {
                         // Wait until we have BATCH_SIZE protections
@@ -215,14 +220,14 @@ public class AdminCleanup extends JavaModule {
                         // remove protections not found in the world
                         if (block == null || !lwc.isProtectable(block)) {
                             toRemove.add(protection.getId());
-                            removed ++;
+                            removed++;
 
                             if (!silent) {
                                 lwc.sendLocale(sender, "protection.admin.cleanup.removednoexist", "protection", protection.toString());
                             }
                         }
 
-                        checked ++;
+                        checked++;
                     }
 
                     // percentage dump
@@ -242,7 +247,7 @@ public class AdminCleanup extends JavaModule {
                 resultStatement.close();
 
                 // flush all of the queries
-                push(toRemove);
+                push(connection, toRemove);
 
                 sender.sendMessage("Cleanup completed. Removed " + removed + " protections out of " + checked + " checked protections.");
             } catch (Exception e) { // database.connect() throws Exception

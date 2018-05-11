@@ -40,6 +40,7 @@ import org.bukkit.scheduler.BukkitScheduler;
 
 import java.io.File;
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.text.SimpleDateFormat;
@@ -228,110 +229,109 @@ public class BackupManager {
         try {
             final Backup backup = new Backup(backupFile, Backup.OperationMode.WRITE, flags);
 
-            scheduler.scheduleAsyncDelayedTask(plugin, new Runnable() {
-                public void run() {
-                    try {
-                        System.out.println("Processing backup request now in a separate thread");
+            scheduler.runTaskAsynchronously(plugin, () -> {
 
-                        // the list of protections work off of. We batch updates to the world
-                        // so we can more than 20 results/second.
-                        final List<Protection> protections = new ArrayList<Protection>(BATCH_SIZE);
+                // TODO separate stream logic to somewhere else :)
+                // Create a new database connection, we are just reading
+                PhysDB database = new PhysDB();
+                if (!database.connect()) {
+                    System.out.println("Error while trying to make backup");
+                    return;
+                }
+                database.load();
+                try (Connection connection = database.getConnection()) {
+                    System.out.println("Processing backup request now in a separate thread");
 
-                        // amount of protections
-                        int totalProtections = lwc.getPhysicalDatabase().getProtectionCount();
+                    // the list of protections work off of. We batch updates to the world
+                    // so we can more than 20 results/second.
+                    final List<Protection> protections = new ArrayList<>(BATCH_SIZE);
 
-                        // Write the header
-                        backup.writeHeader();
+                    // amount of protections
+                    int totalProtections = lwc.getPhysicalDatabase().getProtectionCount();
 
-                        // TODO separate stream logic to somewhere else :)
-                        // Create a new database connection, we are just reading
-                        PhysDB database = new PhysDB();
-                        database.connect();
-                        database.load();
+                    // Write the header
+                    backup.writeHeader();
 
-                        // TODO separate stream logic to somewhere else :)
-                        Statement resultStatement = database.getConnection().createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+                    // TODO separate stream logic to somewhere else :)
+                    Statement resultStatement = connection.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
 
-                        if (lwc.getPhysicalDatabase().getType() == Database.Type.MySQL) {
-                            resultStatement.setFetchSize(Integer.MIN_VALUE);
-                        }
-
-                        String prefix = lwc.getPhysicalDatabase().getPrefix();
-                        ResultSet result = resultStatement.executeQuery("SELECT id, owner, type, x, y, z, data, blockId, world, password, date, last_accessed FROM " + prefix + "protections");
-                        int count = 0;
-
-                        while (result.next()) {
-                            final Protection tprotection = database.resolveProtection(result);
-
-                            if (count % 2000 == 0) {
-                                System.out.println("[Backup] Parsed protections: " + count + "/" + totalProtections);
-                            }
-                            count ++;
-
-                            if (protections.size() != BATCH_SIZE) {
-                                // Wait until we have BATCH_SIZE protections
-                                protections.add(tprotection);
-
-                                if (protections.size() != totalProtections) {
-                                    continue;
-                                }
-                            }
-
-                            // Get all of the blocks in the world
-                            Future<Void> getBlocks = scheduler.callSyncMethod(plugin, new Callable<Void>() {
-                                public Void call() throws Exception {
-                                    for (Protection protection : protections) {
-                                        protection.getBlock(); // this will cache it also :D
-                                    }
-
-                                    return null;
-                                }
-                            });
-
-                            // Get all of the blocks
-                            getBlocks.get();
-
-                            for (Protection protection : protections) {
-                                try {
-                                    // if we are writing the block to the backup, do that before we write the protection
-                                    if (flags.contains(Flag.BACKUP_BLOCKS)) {
-                                        // now we can get the block from the world
-                                        Block block = protection.getBlock();
-
-                                        // Wrap the block object in a RestorableBlock object
-                                        RestorableBlock rblock = RestorableBlock.wrapBlock(block);
-
-                                        // Write it
-                                        backup.writeRestorable(rblock);
-                                    }
-
-                                    // Now write the protection after the block if we are writing protections
-                                    if (flags.contains(Flag.BACKUP_PROTECTIONS)) {
-                                        RestorableProtection rprotection = RestorableProtection.wrapProtection(protection);
-
-                                        // Write it
-                                        backup.writeRestorable(rprotection);
-                                    }
-                                } catch (Exception e) {
-                                    System.out.println("Caught: " + e.getMessage() + ". Carrying on...");
-                                }
-                            }
-
-                            // Clear the protection set, we are done with them
-                            protections.clear();
-                        }
-
-                        // close the sql statements
-                        result.close();
-                        resultStatement.close();
-
-                        // close the backup file
-                        backup.close();
-
-                        System.out.println("Backup completed!");
-                    } catch (Exception e) { // database.connect() throws Exception
-                        System.out.println("Backup exception caught: " + e.getMessage());
+                    if (lwc.getPhysicalDatabase().getType() == Database.Type.MySQL) {
+                        resultStatement.setFetchSize(Integer.MIN_VALUE);
                     }
+
+                    String prefix = lwc.getPhysicalDatabase().getPrefix();
+                    ResultSet result = resultStatement.executeQuery("SELECT id, owner, type, x, y, z, data, blockId, world, password, date, last_accessed FROM " + prefix + "protections");
+                    int count = 0;
+
+                    while (result.next()) {
+                        final Protection tprotection = database.resolveProtection(result);
+
+                        if (count % 2000 == 0) {
+                            System.out.println("[Backup] Parsed protections: " + count + "/" + totalProtections);
+                        }
+                        count ++;
+
+                        if (protections.size() != BATCH_SIZE) {
+                            // Wait until we have BATCH_SIZE protections
+                            protections.add(tprotection);
+
+                            if (protections.size() != totalProtections) {
+                                continue;
+                            }
+                        }
+
+                        // Get all of the blocks in the world
+                        Future<Void> getBlocks = scheduler.callSyncMethod(plugin, () -> {
+                            for (Protection protection : protections) {
+                                protection.getBlock(); // this will cache it also :D
+                            }
+
+                            return null;
+                        });
+
+                        // Get all of the blocks
+                        getBlocks.get();
+
+                        for (Protection protection : protections) {
+                            try {
+                                // if we are writing the block to the backup, do that before we write the protection
+                                if (flags.contains(Flag.BACKUP_BLOCKS)) {
+                                    // now we can get the block from the world
+                                    Block block = protection.getBlock();
+
+                                    // Wrap the block object in a RestorableBlock object
+                                    RestorableBlock rblock = RestorableBlock.wrapBlock(block);
+
+                                    // Write it
+                                    backup.writeRestorable(rblock);
+                                }
+
+                                // Now write the protection after the block if we are writing protections
+                                if (flags.contains(Flag.BACKUP_PROTECTIONS)) {
+                                    RestorableProtection rprotection = RestorableProtection.wrapProtection(protection);
+
+                                    // Write it
+                                    backup.writeRestorable(rprotection);
+                                }
+                            } catch (Exception e) {
+                                System.out.println("Caught: " + e.getMessage() + ". Carrying on...");
+                            }
+                        }
+
+                        // Clear the protection set, we are done with them
+                        protections.clear();
+                    }
+
+                    // close the sql statements
+                    result.close();
+                    resultStatement.close();
+
+                    // close the backup file
+                    backup.close();
+
+                    System.out.println("Backup completed!");
+                } catch (Exception e) {
+                    System.out.println("Backup exception caught: " + e.getMessage());
                 }
             });
 

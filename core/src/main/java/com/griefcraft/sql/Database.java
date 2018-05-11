@@ -30,21 +30,16 @@ package com.griefcraft.sql;
 
 
 import java.sql.Connection;
-import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
-import org.bukkit.Bukkit;
+import com.zaxxer.hikari.HikariDataSource;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.RemovalListener;
-import com.google.common.cache.RemovalNotification;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.scripting.ModuleException;
 import com.griefcraft.util.Statistics;
@@ -53,8 +48,8 @@ import com.griefcraft.util.config.Configuration;
 public abstract class Database {
 
     public enum Type {
-        MySQL("mysql.jar"), //
-        SQLite("sqlite.jar"), //
+        MySQL("com.mysql.jdbc.Driver"), //
+        SQLite("org.sqlite.JDBC"), //
         NONE("nil"); //
 
         private String driver;
@@ -85,6 +80,14 @@ public abstract class Database {
 
     }
 
+    public interface ThrowingCallback<T, R> {
+        T call(R r) throws Throwable;
+    }
+
+    public interface ThrowingConsumer<R> {
+        void accept(R r) throws Throwable;
+    }
+
     /**
      * The database engine being used for this connection
      */
@@ -108,11 +111,11 @@ public abstract class Database {
             }
         } catch (Exception ignored) { }
     }
-
+    
     /**
-     * The connection to the database
+     * Hikari connection pool
      */
-    protected Connection connection = null;
+    private final HikariDataSource ds;
 
     /**
      * The default database engine being used. This is set via config
@@ -142,24 +145,36 @@ public abstract class Database {
     private boolean useStatementCache = true;
 
     public Database() {
-        currentType = DefaultType;
+        this(DefaultType);
+    }
+
+    public Database(Type currentType) {
+        this.currentType = currentType;
 
         prefix = LWC.getInstance().getConfiguration().getString("database.prefix", "");
         if (prefix == null) {
             prefix = "";
         }
-    }
 
-    public Database(Type currentType) {
-        this();
-        this.currentType = currentType;
+        ds = new HikariDataSource();
+        ds.setDriverClassName(currentType.getDriver());
+        ds.setJdbcUrl("jdbc:" + currentType.toString().toLowerCase() + ":" + getDatabasePath());
+        ds.setConnectionTimeout(5000);
+
+        // if we're using mysql, set the database login info
+        if (currentType == Type.MySQL) {
+            LWC lwc = LWC.getInstance();
+            ds.setUsername(lwc.getConfiguration().getString("database.username"));
+            ds.setPassword(lwc.getConfiguration().getString("database.password"));
+        }
     }
 
     /**
      * Ping the database to keep the connection alive
      */
     public void pingDatabase() {
-        try (Statement stmt = connection.createStatement()) {
+        try (Connection connection = getConnection()) {
+            Statement stmt = connection.createStatement();
             stmt.executeQuery("SELECT 1;");
         } catch (SQLException ex) {
             log("Keepalive packet (ping) failed!");
@@ -171,21 +186,26 @@ public abstract class Database {
      * Set the value of auto commit
      *
      * @param autoCommit
-     * @return TRUE if successful, FALSE if exception was thrown
+     * @return Whether or not the database was set to auto commit or not
+     * @throws IllegalStateException If the configuration is already sealed
      */
     public boolean setAutoCommit(boolean autoCommit) {
-        try {
-            // Commit the database if we are setting auto commit back to true
-            if (autoCommit) {
-                connection.commit();
-            }
+        boolean wasAutoCommit = ds.isAutoCommit();
+        ds.setAutoCommit(autoCommit);
+        return wasAutoCommit;
+    }
 
-            connection.setAutoCommit(autoCommit);
-            return true;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+    /**
+     * Set the value of read only
+     *
+     * @param readOnly Whether or not this database should be read only
+     * @return Whether or not the database was readonly or not
+     * @throws IllegalStateException If the configuration is already sealed
+     */
+    public boolean setReadOnly(boolean readOnly) {
+        boolean wasReadOnly = ds.isReadOnly();
+        ds.setReadOnly(readOnly);
+        return wasReadOnly;
     }
 
     /**
@@ -209,49 +229,20 @@ public abstract class Database {
      *
      * @return if the connection was succesful
      */
-    public boolean connect() throws Exception {
-        if (connection != null) {
-            return true;
-        }
-
+    public boolean connect() {
         if (currentType == null || currentType == Type.NONE) {
             log("Invalid database engine");
             return false;
         }
 
-        // load the database jar
-        ClassLoader classLoader = Bukkit.getServer().getClass().getClassLoader();
-
-        // What class should we try to load?
-        String className = "";
-        if (currentType == Type.MySQL) {
-            className = "com.mysql.jdbc.Driver";
-        } else {
-            className = "org.sqlite.JDBC";
-        }
-
-        // Load the driver class
-        Driver driver = (Driver) classLoader.loadClass(className).newInstance();
-
-        // Create the properties to pass to the driver
-        Properties properties = new Properties();
-
-        // if we're using mysql, append the database info
-        if (currentType == Type.MySQL) {
-            LWC lwc = LWC.getInstance();
-            properties.put("autoReconnect", "true");
-            properties.put("user", lwc.getConfiguration().getString("database.username"));
-            properties.put("password", lwc.getConfiguration().getString("database.password"));
-        }
-
-        // Connect to the database
-        try {
-            connection = driver.connect("jdbc:" + currentType.toString().toLowerCase() + ":" + getDatabasePath(), properties);
+        try (Connection connection = getConnection()) {
+            Statement stmt = connection.createStatement();
+            stmt.executeQuery("SELECT 1;");
             connected = true;
             return true;
         } catch (SQLException e) {
             log("Failed to connect to " + currentType + ": " + e.getErrorCode() + " - " + e.getMessage());
-
+    
             if (e.getCause() != null) {
                 log("Connection failure cause: " + e.getCause().getMessage());
             }
@@ -261,23 +252,15 @@ public abstract class Database {
 
     public void dispose() {
         statementCache.invalidateAll();
-
-        try {
-            if (connection != null) {
-                connection.close();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
-        connection = null;
+        ds.close();
+        connected = false;
     }
 
     /**
      * @return the connection to the database
      */
-    public Connection getConnection() {
-        return connection;
+    public Connection getConnection() throws SQLException {
+        return ds.getConnection();
     }
 
     /**
@@ -315,24 +298,96 @@ public abstract class Database {
     }
 
     /**
-     * Prepare a statement unless it's already cached (and if so, just return it)
+     * Prepare a statement unless it's already cached and consume it
      *
-     * @param sql
-     * @return
+     * @param sql       The SQL to execute
+     * @param callback  What to do with the prepared statement
+     * @return what the callback returns or null if not connected
      */
-    public PreparedStatement prepare(String sql) {
-        return prepare(sql, false);
+    public <T> T prepare(String sql, ThrowingCallback<T, PreparedStatement> callback) {
+        return prepare(sql, false, callback);
     }
 
     /**
-     * Prepare a statement unless it's already cached (and if so, just return it)
+     * Prepare a statement unless it's already cached and consume it
      *
-     * @param sql
-     * @param returnGeneratedKeys
-     * @return
+     * @param sql       The SQL to execute
+     * @param consumer  What to do with the prepared statement
      */
-    public PreparedStatement prepare(String sql, boolean returnGeneratedKeys) {
-        if (connection == null) {
+    public void prepare(String sql, ThrowingConsumer<PreparedStatement> consumer) {
+        prepare(sql, false, statement -> {
+            consumer.accept(statement);
+            return null;
+        });
+    }
+
+    /**
+     * Prepare a statement unless it's already cached and consume it
+     *
+     * @param sql       The SQL to execute
+     * @param consumer  What to do with the prepared statement
+     * @param throwableConsumer     What to do if an error is thrown
+     */
+    public void prepare(String sql, ThrowingConsumer<PreparedStatement> consumer, Consumer<Throwable> throwableConsumer) {
+        prepare(sql, false, statement -> {
+            consumer.accept(statement);
+            return null;
+        }, throwableConsumer);
+    }
+
+    /**
+     * Prepare a statement unless it's already cached and consume it
+     *
+     * @param sql                   The SQL to execute
+     * @param returnGeneratedKeys   Whether or not to return the generated keys
+     * @param consumer  What to do with the prepared statement
+     */
+    public void prepare(String sql, boolean returnGeneratedKeys, ThrowingConsumer<PreparedStatement> consumer) {
+        prepare(sql, returnGeneratedKeys, statement -> {
+            consumer.accept(statement);
+            return null;
+        }, throwable -> {
+            throw new ModuleException("Failed to run prepared statement " + sql, throwable);
+        });
+    }
+
+    /**
+     * Prepare a statement unless it's already cached and consume it
+     *
+     * @param sql       The SQL to execute
+     * @param callback  What to do with the prepared statement
+     * @param throwableConsumer     What to do if an error is thrown
+     * @return what the callback returns or null if not connected
+     */
+    public <T> T prepare(String sql, ThrowingCallback<T, PreparedStatement> callback, Consumer<Throwable> throwableConsumer) {
+        return prepare(sql, false, callback, throwableConsumer);
+    }
+
+    /**
+     * Prepare a statement unless it's already cached and consume it
+     *
+     * @param sql                   The SQL to execute
+     * @param returnGeneratedKeys   Whether or not to return the generated keys
+     * @param callback              What to do with the prepared statement
+     * @return what the callback returns or null if not connected
+     */
+    public <T> T prepare(String sql, boolean returnGeneratedKeys, ThrowingCallback<T, PreparedStatement> callback) {
+        return prepare(sql, returnGeneratedKeys, callback, throwable -> {
+            throw new ModuleException("Failed to run prepared statement " + sql, throwable);
+        });
+    }
+
+    /**
+     * Prepare a statement unless it's already cached and consume it
+     *
+     * @param sql                   The SQL to execute
+     * @param returnGeneratedKeys   Whether or not to return the generated keys
+     * @param callback              What to do with the prepared statement
+     * @param throwableConsumer     What to do if an error is thrown
+     * @return what the callback returns or null if not connected
+     */
+    public <T> T prepare(String sql, boolean returnGeneratedKeys, ThrowingCallback<T, PreparedStatement> callback, Consumer<Throwable> throwableConsumer) {
+        if (!ds.isRunning() || ds.isClosed()) {
             return null;
         }
 
@@ -340,30 +395,31 @@ public abstract class Database {
             if (useStatementCache) {
                 Statistics.addQuery();
                 final PreparedStatement p = statementCache.getIfPresent(sql);
-				if(p != null) return p;
+                if(p != null && !p.isClosed()) {
+                    return callback.call(p);
+                }
             }
 
-            return prepareInternal(sql, returnGeneratedKeys);
+            try (Connection connection = ds.getConnection()) {
+                PreparedStatement preparedStatement;
+
+                if (returnGeneratedKeys) {
+                    preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+                } else {
+                    preparedStatement = connection.prepareStatement(sql);
+                }
+
+                if (useStatementCache) {
+                    statementCache.put(sql, preparedStatement);
+                }
+
+                Statistics.addQuery();
+                return callback.call(preparedStatement);
+            }
         } catch (Throwable ex) {
-            throw new RuntimeException("Failed to prepare statement " + sql, ex);
+            throwableConsumer.accept(ex);
+            return null;
         }
-    }
-
-    private PreparedStatement prepareInternal(String sql, boolean returnGeneratedKeys) throws SQLException {
-        PreparedStatement preparedStatement;
-
-        if (returnGeneratedKeys) {
-            preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-        } else {
-            preparedStatement = connection.prepareStatement(sql);
-        }
-
-        if (useStatementCache) {
-            statementCache.put(sql, preparedStatement);
-        }
-
-        Statistics.addQuery();
-        return preparedStatement;
     }
 
     /**
@@ -412,21 +468,13 @@ public abstract class Database {
      * @return true if an exception was thrown
      */
     public boolean executeUpdateNoException(String query) {
-        Statement statement = null;
         boolean exception = false;
 
-        try {
-            statement = connection.createStatement();
+        try (Connection connection = ds.getConnection()) {
+            Statement statement = connection.createStatement();
             statement.executeUpdate(query);
         } catch (SQLException e) {
             exception = true;
-        } finally {
-            try {
-                if (statement != null) {
-                    statement.close();
-                }
-            } catch (SQLException e) {
-            }
         }
 
         return exception;
