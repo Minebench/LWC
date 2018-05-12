@@ -1568,8 +1568,8 @@ public class PhysDB extends Database {
                 it.remove();
             }
 
-            statement.getConnection().setAutoCommit(true);
             statement.getConnection().commit();
+            statement.getConnection().setAutoCommit(true);
         });
     }
 
