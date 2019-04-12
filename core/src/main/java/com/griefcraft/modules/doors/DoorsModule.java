@@ -32,6 +32,7 @@ import org.bukkit.Effect;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Openable;
 import org.bukkit.block.data.type.Door;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
@@ -204,17 +205,19 @@ public class DoorsModule extends JavaModule {
                 continue;
             }
 
-            Door data = (Door) door.getBlockData();
+            Openable data = (Openable) door.getBlockData();
             if (!allowDoorToOpen && !data.isOpen()) {
                 continue;
             }
 
             // Get the top half of the door
-            Block topHalf = door.getRelative(BlockFace.UP);
-            if (topHalf.getBlockData() instanceof Door) {
-                Door topData = (Door) topHalf.getBlockData();
-                topData.setOpen(true);
-                topHalf.setBlockData(topData);
+            if (DoorMatcher.DOORS.contains(door.getType())) {
+                Block topHalf = door.getRelative(BlockFace.UP);
+                if (topHalf.getBlockData() instanceof Door) {
+                    Door topData = (Door) topHalf.getBlockData();
+                    topData.setOpen(true);
+                    topHalf.setBlockData(topData);
+                }
             }
 
             data.setOpen(true);
