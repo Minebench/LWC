@@ -32,6 +32,7 @@ import org.bukkit.Effect;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Bisected;
 import org.bukkit.block.data.Openable;
 import org.bukkit.block.data.type.Door;
 import org.bukkit.entity.Player;
@@ -133,7 +134,7 @@ public class DoorsModule extends JavaModule {
 
         // Are we looking at the top half?
         // If we are, we need to get the bottom half instead
-        if (!DoorMatcher.TRAP_DOORS.contains(block.getType()) && (block.getData() & 0x8) == 0x8) {
+        if (block.getBlockData() instanceof Bisected && ((Bisected) block.getBlockData()).getHalf() == Bisected.Half.TOP) {
             // Inspect the bottom half instead, fool!
             block = block.getRelative(BlockFace.DOWN);
         }
@@ -215,12 +216,12 @@ public class DoorsModule extends JavaModule {
                 Block topHalf = door.getRelative(BlockFace.UP);
                 if (topHalf.getBlockData() instanceof Door) {
                     Door topData = (Door) topHalf.getBlockData();
-                    topData.setOpen(true);
+                    topData.setOpen(!topData.isOpen());
                     topHalf.setBlockData(topData);
                 }
             }
 
-            data.setOpen(true);
+            data.setOpen(!data.isOpen());
             door.setBlockData(data);
 
             // Play the door open/close sound
