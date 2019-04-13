@@ -202,7 +202,7 @@ public class DoorsModule extends JavaModule {
      */
     private void changeDoorStates(boolean allowDoorToOpen, Block... doors) {
         for (Block door : doors) {
-            if (door == null) {
+            if (door == null || !(door.getBlockData() instanceof Openable)) {
                 continue;
             }
 
