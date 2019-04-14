@@ -1227,6 +1227,9 @@ public class LWC {
                 && block.getZ() == block2.getZ() && block.getRawData() == block2.getRawData();
     }
 
+
+    private static final int MAX_WORLD_RADIUS = 30000000;
+
     /**
      * Find a protection linked to the location
      *
@@ -1237,6 +1240,10 @@ public class LWC {
         String cacheKey = protectionCache.cacheKey(location);
 
         if (protectionCache.isKnownNull(cacheKey)) {
+            return null;
+        }
+
+        if (location.getX() > MAX_WORLD_RADIUS || location.getX() < -MAX_WORLD_RADIUS || location.getZ() > MAX_WORLD_RADIUS || location.getZ() < -MAX_WORLD_RADIUS) {
             return null;
         }
 
