@@ -109,7 +109,7 @@ public class DoorsModule extends JavaModule {
 
     @Override
     public void onProtectionInteract(LWCProtectionInteractEvent event) {
-        if (event.getResult() == Result.CANCEL || !isEnabled()) {
+        if (event.getResult() == Result.CANCEL || event.getEvent().isCancelled() || !isEnabled()) {
             return;
         }
 
