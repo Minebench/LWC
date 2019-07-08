@@ -1471,7 +1471,6 @@ public class LWC {
 
         // add the name & the block id
         names.add(materialName);
-        names.add(entity.getTypeId() + "");
 
         // Add the wildcards last so it can be overriden
         names.add("*");
@@ -1504,46 +1503,7 @@ public class LWC {
             return resolveProtectionConfiguration(((EntityBlock) block).getEntityType(), node);
         }
 
-        Material material = block.getType();
-        String cacheKey = block.getData() + "-" + material.toString() + "-" + node;
-        if (protectionConfigurationCache.containsKey(cacheKey)) {
-            return protectionConfigurationCache.get(cacheKey);
-        }
-
-        List<String> names = new ArrayList<String>();
-
-        String materialName = normalizeMaterialName(material);
-
-        // add the name & the block id
-        names.add(materialName);
-        names.add(material.getId() + "");
-        names.add(material.getId() + ":" + block.getData());
-        names.add(materialName + ":" + block.getData());
-
-        if (!materialName.equals(material.toString().toLowerCase())) {
-            names.add(material.toString().toLowerCase());
-        }
-
-        // Add the wildcards last so it can be overriden
-        names.add("*");
-        names.add(material.getId() + ":*");
-
-        if (materialName.contains("_")) { // Prefix wildcarding for shulker boxes & gates
-            names.add("*_" + materialName.substring(materialName.indexOf("_") + 1));
-        }
-
-        String value = configuration.getString("protections." + node);
-
-        for (String name : names) {
-            String temp = configuration.getString("protections.blocks." + name + "." + node);
-
-            if (temp != null && !temp.isEmpty()) {
-                value = temp;
-            }
-        }
-
-        protectionConfigurationCache.put(cacheKey, value);
-        return value;
+        return resolveProtectionConfiguration(block.getType(), node);
     }
 
     /**
@@ -1554,45 +1514,7 @@ public class LWC {
      * @return
      */
     public String resolveProtectionConfiguration(BlockState state, String node) {
-        Material material = state.getType();
-        String cacheKey = state.getRawData() + "-" + material.toString() + "-" + node;
-        if (protectionConfigurationCache.containsKey(cacheKey)) {
-            return protectionConfigurationCache.get(cacheKey);
-        }
-
-        List<String> names = new ArrayList<String>();
-
-        String materialName = normalizeMaterialName(material);
-
-        // add the name & the block id
-        names.add(materialName);
-        names.add(material.getId() + "");
-        names.add(material.getId() + ":" + state.getRawData());
-        names.add(materialName + ":" + state.getRawData());
-
-        if (!materialName.equals(material.toString().toLowerCase())) {
-            names.add(material.toString().toLowerCase());
-        }
-
-        // Add the wildcards last so it can be overriden
-        names.add("*");
-        names.add(material.getId() + ":*");
-
-        if (materialName.contains("_")) { // Prefix wildcarding for shulker boxes & gates
-            names.add("*_" + materialName.substring(materialName.indexOf("_") + 1));
-        }
-        String value = configuration.getString("protections." + node);
-
-        for (String name : names) {
-            String temp = configuration.getString("protections.blocks." + name + "." + node);
-
-            if (temp != null && !temp.isEmpty()) {
-                value = temp;
-            }
-        }
-
-        protectionConfigurationCache.put(cacheKey, value);
-        return value;
+        return resolveProtectionConfiguration(state.getType(), node);
     }
 
     /**
@@ -1603,7 +1525,7 @@ public class LWC {
      * @return
      */
     public String resolveProtectionConfiguration(Material material, String node) {
-        String cacheKey = "00-" + material.toString() + "-" + node;
+        String cacheKey = material.toString() + "-" + node;
         if (protectionConfigurationCache.containsKey(cacheKey)) {
             return protectionConfigurationCache.get(cacheKey);
         }
@@ -1614,15 +1536,21 @@ public class LWC {
 
         // add the name & the block id
         names.add(materialName);
-        names.add(material.getId() + "");
 
         if (!materialName.equals(material.toString().toLowerCase())) {
             names.add(material.toString().toLowerCase());
         }
 
+        if (materialName.contains("_")) { // Prefix wildcarding for shulker boxes & gates
+            int i = materialName.indexOf("_") + 1;
+            while(i > 0) {
+                names.add("*_" + materialName.substring(i));
+                i = materialName.indexOf("_", i) + 1;
+            }
+        }
+
         // Add the wildcards last so it can be overriden
         names.add("*");
-        names.add(material.getId() + ":*");
 
         String value = configuration.getString("protections." + node);
 
