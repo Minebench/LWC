@@ -43,13 +43,13 @@ import com.griefcraft.scripting.event.LWCProtectionRegisterEvent;
 import com.griefcraft.scripting.event.LWCProtectionRegistrationPostEvent;
 import com.griefcraft.scripting.event.LWCRedstoneEvent;
 import com.griefcraft.util.Colors;
-import com.griefcraft.util.LegacyMaterials;
 import com.griefcraft.util.matchers.DoubleChestMatcher;
 
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.data.type.Hopper;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -58,8 +58,6 @@ import org.bukkit.event.block.*;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.world.StructureGrowEvent;
 import org.bukkit.inventory.InventoryHolder;
-import org.bukkit.material.Hopper;
-import org.bukkit.material.MaterialData;
 
 public class LWCBlockListener implements Listener {
 
@@ -71,7 +69,7 @@ public class LWCBlockListener implements Listener {
     /**
      * A set of blacklisted blocks
      */
-    private final Set<MaterialData> blacklistedBlocks = new HashSet<>();
+    private final Set<Material> blacklistedBlocks = new HashSet<>();
 
     public LWCBlockListener(LWCPlugin plugin) {
         this.plugin = plugin;
@@ -301,9 +299,7 @@ public class LWCBlockListener implements Listener {
         }
 
         // check if the block is blacklisted
-        BlockState state = block.getState();
-
-        if (blacklistedBlocks.contains(state.getData())) {
+        if (blacklistedBlocks.contains(block.getType())) {
             // it's blacklisted, check for a protected chest
             for (Protection protection : lwc.findAdjacentProtectionsOnAllSides(block)) {
                 if (protection != null) {
@@ -320,6 +316,7 @@ public class LWCBlockListener implements Listener {
                             case DROPPER:
                             case BREWING_STAND:
                             case FURNACE:
+                            case SHULKER_BOX:
                             case WHITE_SHULKER_BOX:
                             case ORANGE_SHULKER_BOX:
                             case MAGENTA_SHULKER_BOX:
@@ -357,7 +354,7 @@ public class LWCBlockListener implements Listener {
             }
             
             // also check if the hopper is pointing into a protection
-            Hopper hopperData = (Hopper) state.getData();
+            Hopper hopperData = (Hopper) block.getBlockData();
             Block target = block.getRelative(hopperData.getFacing());
             if (checkForHopperProtection(player, target)) {
                 event.setCancelled(true);
@@ -536,13 +533,11 @@ public class LWCBlockListener implements Listener {
             try {
                 String[] idParts = sId.trim().split(":");
                 Material material = Material.matchMaterial(idParts[0].trim());
-                byte data = 0;
-
-                if (idParts.length > 1) {
-                    data = Byte.parseByte(idParts[1].trim());
+                if (material == null) {
+                    continue;
                 }
 
-                blacklistedBlocks.add(new MaterialData(material, data));
+                blacklistedBlocks.add(material);
             } catch (Exception ex) {
                 LWC.getInstance().log("Failed to parse \"" + sId + "\" from optional.blacklistedBlocks:");
                 ex.printStackTrace();
